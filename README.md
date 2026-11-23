@@ -1,36 +1,36 @@
 # DeskBuddy
 
-Monitor limitów subskrypcji **Codex (5 h i 7 dni)** oraz **Claude (5 h i 7 dni)** na ESP32‑C3 Super Mini z ekranem ST7735 128 × 160.
-Każdy wiersz pokazuje procent wykorzystania i czas do resetu. Bramka na Macu zbiera dane z natywnych CLI i wystawia je po HTTPS w LAN,
-a ESP32 tylko je pobiera i rysuje.
+A monitor for **Codex (5 h and 7 days)** and **Claude (5 h and 7 days)** subscription limits on an ESP32‑C3 Super Mini with a 128 × 160 ST7735 display.
+Each row shows the usage percentage and the time until reset. A gateway on a Mac collects the data from the native CLIs and serves it over HTTPS on the LAN;
+the ESP32 only fetches and draws it.
 
 ```
- codex app-server ─┐                                     ┌── GET /v1/usage (HTTPS, klucz urządzenia)
-                   ├─ kolektor ─ usage.json ─ bramka ────┤
- claude -p /usage ─┘  (host, launchd)   (wolumen ro)  (Docker)   └── ESP32‑C3 + ST7735
+ codex app-server ─┐                                   ┌── GET /v1/usage (HTTPS, device key)
+                   ├─ collector ─ usage.json ─ gateway ┤
+ claude -p /usage ─┘  (host, launchd)  (ro volume)  (Docker)   └── ESP32‑C3 + ST7735
 ```
 
-## Struktura
+## Layout
 
-| Katalog | Zawartość |
+| Directory | Contents |
 |---|---|
-| `gateway/` | pakiet `deskbuddy_gateway` (tylko biblioteka standardowa Pythona): kolektor, serwer HTTPS, testy, `Dockerfile` |
-| `firmware/deskbuddy/` | szkic Arduino (core ESP32 `3.3.11`, Adafruit ST7735/GFX, ArduinoJson) |
-| `deploy/` | `compose.yaml`, generator certyfikatów, agent `launchd` kolektora |
-| `tools/` | provisioning przez USB (`provision.py`), log z portu (`serial_log.py`), scenariusze testowe (`write_scenario.py`) |
-| `examples/` | przykładowy `usage.json` |
+| `gateway/` | the `deskbuddy_gateway` package (Python standard library only): collector, HTTPS server, tests, `Dockerfile` |
+| `firmware/deskbuddy/` | Arduino sketch (ESP32 core `3.3.11`, Adafruit ST7735/GFX, ArduinoJson) |
+| `deploy/` | `compose.yaml`, certificate generator, `launchd` agent for the collector |
+| `tools/` | USB provisioning (`provision.py`), serial log (`serial_log.py`), test scenarios (`write_scenario.py`) |
+| `examples/` | example `usage.json` |
 
-## Dane
+## Data
 
-* **Codex** – `codex app-server`, JSON‑RPC `account/rateLimits/read`. Okna rozpoznawane po `windowDurationMins` (300 = 5 h, 10 080 = 7 dni), nie po kolejności `primary/secondary`. Odczyt co 2 min.
-* **Claude** – `claude -p /usage` (natywny Claude Code, bez modelu i bez tokenów). Parser czyta wiersze `Current session` i `Current week (all models)` oraz czas resetu wraz ze strefą z nawiasu. Odczyt co 5 min.
-  Polecenie jest konfigurowalne (`--claude-cmd`), więc kolektor może też uruchomić je przez SSH na innym Macu.
-* Błąd odczytu **nie kasuje** poprzednich wartości. Kolektor ponawia z wykładniczym opóźnieniem (do 30 min) i uwzględnia czas ponowienia z komunikatu o ograniczeniu. Przy `rate_limited` lub po 3 pominiętych cyklach bramka oznacza usługę jako `stale`.
-* Wygaśnięcie odliczania **nie zeruje** procentu; ekran pokazuje `0m` do następnego odczytu.
+* **Codex**: `codex app-server`, JSON‑RPC `account/rateLimits/read`. Windows are identified by `windowDurationMins` (300 = 5 h, 10 080 = 7 days), not by `primary`/`secondary` order. Polled every 2 min.
+* **Claude**: `claude -p /usage` (native Claude Code; no model call, no tokens). The parser reads the `Current session` and `Current week (all models)` rows and the reset time with the time zone from the parentheses. Polled every 5 min.
+  The command is configurable (`--claude-cmd`), so the collector can also run it over SSH on another Mac.
+* A failed read **does not erase** the previous values. The collector retries with exponential backoff (up to 30 min) and honours a retry time found in a rate‑limit message. On `rate_limited`, or after 3 missed cycles, the gateway marks the service `stale`.
+* An expired countdown **does not reset** the percentage to zero; the screen shows `0m` until the next reading.
 
-### Odpowiedź `GET /v1/usage`
+### `GET /v1/usage` response
 
-Wymaga nagłówka `Authorization: Bearer <klucz urządzenia>`. `GET /healthz` jest otwarty.
+Requires the header `Authorization: Bearer <device key>`. `GET /healthz` is open.
 
 ```json
 {"schema":1,"seq":12,"served":345,"now":1795426949,
@@ -40,21 +40,21 @@ Wymaga nagłówka `Authorization: Bearer <klucz urządzenia>`. `GET /healthz` je
   "claude":{ "...": "..." }}}
 ```
 
-`state`: `fresh` / `stale` / `missing`. `seq` to numer odczytu kolektora, `served` licznik odpowiedzi bramki.
-Gotowa linia w logu bramki (`seq=12 served=345`) odpowiada linii `RENDER seq=12 served=345` z USB urządzenia.
+`state` is `fresh`, `stale` or `missing`. `seq` is the collector's reading number and `served` is the gateway's response counter.
+A gateway log line (`seq=12 served=345`) matches the `RENDER seq=12 served=345` line on the device's USB serial output.
 
-## Uruchomienie lokalne (ten Mac)
+## Running locally (this Mac)
 
 ```bash
-# 1. Certyfikaty i klucz urządzenia (SAN: adresy IP wszystkich hostów bramki)
+# 1. Certificates and device key (SAN: the LAN IPs of every host that may run the gateway)
 deploy/init_secrets.sh 192.168.0.246 192.168.0.188
 
-# 2. Kolektor (Codex lokalnie, Claude lokalnie albo przez SSH)
+# 2. Collector (Codex locally; Claude locally or over SSH)
 cd gateway
 python3 -m deskbuddy_gateway.collector --data-dir ../deploy/local/data \
   --claude-cmd 'ssh -o BatchMode=yes mini "~/.local/bin/claude -p /usage"'
 
-# 3. Bramka
+# 3. Gateway
 S=../deploy/local/secrets
 DESKBUDDY_DATA_DIR=../deploy/local/data DESKBUDDY_KEYS_FILE=$S/device_keys.txt \
 DESKBUDDY_CERT=$S/server.pem DESKBUDDY_KEY=$S/server.key python3 -m deskbuddy_gateway.server
@@ -68,53 +68,53 @@ arduino-cli compile --fqbn "$FQBN" firmware/deskbuddy
 arduino-cli upload  --fqbn "$FQBN" -p /dev/cu.usbmodem3101 firmware/deskbuddy
 ```
 
-Piny: `SCK→GPIO4`, `SDA/MOSI→GPIO6`, `CS→GPIO7`, `A0/DC→GPIO3`, `RESET→GPIO1`, `VCC→3V3`, `GND→GND`. Pin `LED` (podświetlenie): zob. niżej.
+Pins: `SCK→GPIO4`, `SDA/MOSI→GPIO6`, `CS→GPIO7`, `A0/DC→GPIO3`, `RESET→GPIO1`, `VCC→3V3`, `GND→GND`. The `LED` (backlight) pin: see below.
 
-### Konfiguracja urządzenia przez USB (NVS)
+### Device configuration over USB (NVS)
 
-Wi‑Fi, adres bramki, klucz i CA trafiają do pamięci NVS; zmiana adresu bramki nie wymaga ponownego flashowania.
-ESP32‑C3 łączy się **tylko z 2,4 GHz** (komenda `SCAN` na USB pokazuje, co widzi układ).
+Wi‑Fi credentials, the gateway address, the device key and the CA are stored in NVS; changing the gateway address does not require reflashing.
+The ESP32‑C3 joins **2.4 GHz networks only** (the `SCAN` command over USB shows what the chip can see).
 
 ```bash
-python3 tools/provision.py --ssid <SSID_2.4GHz> --gw-host 192.168.0.246   # hasło Wi‑Fi: pytanie w terminalu
-python3 tools/provision.py --gw-host 192.168.0.188                       # tylko przełączenie bramki
-python3 tools/serial_log.py --seconds 60                                 # BOOT / FETCH / RENDER / STATUS
+python3 tools/provision.py --ssid <2.4GHz_SSID> --gw-host 192.168.0.246   # Wi‑Fi password is prompted in the terminal
+python3 tools/provision.py --gw-host 192.168.0.188                        # only switch the gateway
+python3 tools/serial_log.py --seconds 60                                  # BOOT / FETCH / RENDER / STATUS
 ```
 
-Komendy portu szeregowego (115200): `HELP STATUS GET SET <klucz> <wartość> CLEAR TEST APPLY FETCH SCAN WIFI_BOUNCE [s] REBOOT`.
-Ustawienia panelu: `tft_tab` (0 green, 1 red, 2 black; ten moduł działa z 2), `tft_mhz` (zegar SPI, domyślnie 8; przy 24 MHz obraz był poszatkowany), `tft_rot` (0 lub 2), `tft_swaprb`, `tft_inv`, `col_off`, `row_off`, `bl_pin`, `bl_on`.
-`TEST` rysuje planszę (8 pasków, ramka, znaczniki rogów), `APPLY` wraca do ekranu limitów po zmianie ustawień.
+Serial commands (115200): `HELP STATUS GET SET <key> <value> CLEAR TEST APPLY FETCH SCAN WIFI_BOUNCE [s] REBOOT`.
+Panel settings: `tft_tab` (0 green, 1 red, 2 black; this module works with 2), `tft_mhz` (SPI clock, default 8; at 24 MHz the picture was garbled), `tft_rot` (0 or 2), `tft_swaprb`, `tft_inv`, `col_off`, `row_off`, `bl_pin`, `bl_on`.
+`TEST` draws a test plate (8 colour bars, a frame, corner markers); `APPLY` returns to the limits screen after changing settings.
 
-**Podświetlenie.** Pin `LED` modułu (czerwona płytka „1.8 TFT SPI 128*160 V1.1”) podłączony do `3V3` przez rezystor 47–100 Ω; bez tego ekran jest ciemny.
-Nie podłączaj go do GPIO (za duży prąd) ani do 5 V. Producent zaznacza, że opis tego pinu jest niespójny, więc przy innym module sprawdź jego wymagania.
+**Backlight.** Connect the module's `LED` pin (red "1.8 TFT SPI 128*160 V1.1" board) to `3V3` through a 47–100 Ω resistor; without it the screen stays dark.
+Do not drive it from a GPIO (too much current) or from 5 V. The manufacturer notes that the description of this pin is inconsistent, so check the requirements of any other module.
 
-## Testy
+## Tests
 
 ```bash
 cd gateway && python3 -m unittest discover -s tests -t . -v
 ```
 
-Pokrywają parsery (w tym zanonimizowane próbki `/usage` i prawdziwą odpowiedź Codex), protokół z atrapą `codex app-server`,
-ponawianie i zachowanie ostatnich wartości, autoryzację oraz TLS z prywatnym CA i SAN z adresem IP.
+They cover the parsers (including anonymised `/usage` samples and a real Codex response), the protocol against a fake `codex app-server`,
+retry behaviour and keeping the last good values, authorisation, and TLS with a private CA and an IP‑address SAN.
 
-Scenariusze wyświetlania bez dotykania kont: `python3 tools/write_scenario.py <normal|zero|full|missing-window|missing-service|stale|expired|rate-limited>`.
+Display scenarios that do not touch real accounts: `python3 tools/write_scenario.py <normal|zero|full|missing-window|missing-service|stale|expired|rate-limited>`.
 
-## Bramka na Macu mini (Docker + launchd)
+## Gateway on a Mac mini (Docker + launchd)
 
 ```bash
 git clone https://github.com/Franek1703/deskBuddy.git && cd deskBuddy
-deploy/init_secrets.sh 192.168.0.188          # albo skopiuj deploy/local/secrets z obecnego Maca
-deploy/install_collector_launchd.sh <ścieżka/codex> <ścieżka/claude>
+deploy/init_secrets.sh 192.168.0.188          # or copy deploy/local/secrets from the other Mac
+deploy/install_collector_launchd.sh <path/to/codex> <path/to/claude>
 docker compose -f deploy/compose.yaml up -d --build
 docker compose -f deploy/compose.yaml ps       # healthy
 ```
 
-Kolektor działa na hoście (potrzebuje zalogowanych CLI), a kontener czyta `usage.json` z wolumenu tylko do odczytu.
-Certyfikat serwera jest wystawiony na adresy IP z `init_secrets.sh`; po zmianie adresu LAN wygeneruj go ponownie
-(`ca.pem` na urządzeniu pozostaje ten sam, jeśli nie kasujesz `ca.key`).
+The collector runs on the host (it needs the logged‑in CLIs); the container reads `usage.json` from a read‑only volume.
+The server certificate is issued for the IP addresses passed to `init_secrets.sh`; after a LAN address change, generate it again
+(the device's `ca.pem` stays the same as long as you keep `ca.key`).
 
-## Rzeczy świadomie pominięte
+## Deliberate omissions
 
-* `cad/`, dane środowiska i sekrety są poza Git (`.gitignore`).
-* Brak odczytu `/usage` w pseudoterminalu: `claude -p /usage` zwraca czysty tekst bez TUI, więc parser nie zależy od sekwencji sterujących.
-* Zegar urządzenia pochodzi z NTP (potrzebny do sprawdzenia ważności certyfikatu). Bez internetu w LAN połączenie TLS nie ruszy.
+* `cad/`, environment data and secrets are kept out of Git (`.gitignore`).
+* `/usage` is not read through a pseudo‑terminal: `claude -p /usage` prints plain text without the TUI, so the parser does not depend on control sequences.
+* The device clock comes from NTP (needed to check certificate validity). Without internet access on the LAN the TLS connection will not start.
