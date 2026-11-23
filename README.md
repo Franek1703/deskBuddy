@@ -81,8 +81,8 @@ python3 tools/provision.py --gw-host 192.168.0.188                        # only
 python3 tools/serial_log.py --seconds 60                                  # BOOT / FETCH / RENDER / STATUS
 ```
 
-Serial commands (115200): `HELP STATUS GET SET <key> <value> CLEAR TEST APPLY FETCH SCAN WIFI_BOUNCE [s] REBOOT`.
-Panel settings: `tft_tab` (0 green, 1 red, 2 black; this module works with 2), `tft_mhz` (SPI clock, default 8; at 24 MHz the picture was garbled), `tft_rot` (0 or 2), `tft_swaprb`, `tft_inv`, `col_off`, `row_off`, `bl_pin`, `bl_on`.
+Serial commands (115200): `HELP STATUS GET SET <key> <value> CLEAR TEST APPLY FETCH SCAN WIFI_BOUNCE [s] SLEEP_NOW [s] REBOOT`.
+Panel settings: `tft_tab` (0 green, 1 red, 2 black; this module works with 2), `tft_mhz` (SPI clock, default 8; at 24 MHz the picture was garbled), `tft_rot` (0 or 2), `tft_swaprb`, `tft_inv`, `col_off`, `row_off`, `bl_pin`, `bl_on`, `wifi_tx`, `sleep_wd`, `sleep_we`, `tz`.
 `TEST` draws a test plate (8 colour bars, a frame, corner markers); `APPLY` returns to the limits screen after changing settings.
 
 **Wi‑Fi TX power.** `wifi_tx` sets the transmit power in whole dBm (2–20); `0` keeps the 8.5 dBm default. The default is low because Super Mini boards can drop the link at full power,
@@ -95,7 +95,7 @@ brownout / panic / watchdog resets since the last power‑on (the counter surviv
 Do not send `SCAN` while the device is still connecting: it interrupts the connection attempt.
 
 **Backlight.** Connect the module's `LED` pin (red "1.8 TFT SPI 128*160 V1.1" board) to `3V3` through a 47–100 Ω resistor; without it the screen stays dark.
-Do not drive it from a GPIO (too much current) or from 5 V. The manufacturer notes that the description of this pin is inconsistent, so check the requirements of any other module.
+Do not drive it from a GPIO directly (too much current; use the transistor described under *Sleep schedule*) or from 5 V. The manufacturer notes that the description of this pin is inconsistent, so check the requirements of any other module.
 
 ## Tests
 
@@ -121,6 +121,37 @@ docker compose -f deploy/compose.yaml ps       # healthy
 The collector runs on the host (it needs the logged‑in CLIs); the container reads `usage.json` from a read‑only volume.
 The server certificate is issued for the IP addresses passed to `init_secrets.sh`; after a LAN address change, generate it again
 (the device's `ca.pem` stays the same as long as you keep `ca.key`).
+
+## Sleep schedule
+
+During the sleep window the screen is dark, Wi‑Fi is off and the device does not poll. The schedule lives in the gateway and is relayed in `/v1/usage`;
+the device stores the last values in NVS and evaluates them itself with the (verified) clock, so it keeps working while the gateway is down.
+
+Configure it in `deploy/compose.yaml`, then `docker compose -f deploy/compose.yaml up -d`:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `DESKBUDDY_SLEEP_WEEKDAYS` | `22:00-07:00` | rule for Monday–Friday (`HH:MM-HH:MM`, or `off`) |
+| `DESKBUDDY_SLEEP_WEEKEND` | `22:00-07:00` | rule for Saturday and Sunday |
+| `DESKBUDDY_TZ` | `CET-1CEST,M3.5.0,M10.5.0/3` | POSIX TZ string (Europe/Warsaw incl. DST) |
+
+A rule is picked by the local calendar day of the moment being checked: on that day the device sleeps from `start` until midnight and from midnight until `end`
+(`start > end` wraps past midnight; `start < end` is a same‑day window). So with weekend `23:30-09:00`, Saturday morning ends at 09:00 and Saturday night starts at 23:30.
+At the end of the window Wi‑Fi comes back and the first fetch completes **before** the screen lights, so there are no stale numbers in the morning (20 s timeout).
+The device never sleeps until its clock is verified (SNTP, or the gateway's `now`, which also corrects drift larger than 3 s). The collector on the host keeps running.
+
+USB fallback and testing (the gateway's values overwrite these on the next fetch):
+
+```bash
+python3 tools/serial_log.py --seconds 5 --send "SET sleep_wd 22:00-07:00" --send "SET sleep_we 23:30-09:00" --send "SET tz CET-1CEST,M3.5.0,M10.5.0/3"
+python3 tools/serial_log.py --seconds 40 --send "SLEEP_NOW 20" --send STATUS   # force a 20 s sleep; STATUS shows sleep=, local=, clock=
+clang++ -std=c++17 -I firmware/deskbuddy firmware/tests/test_sleep_schedule.cpp -o /tmp/t && /tmp/t   # schedule logic unit test
+```
+
+**Switching the backlight off.** `LED` is the backlight anode, so the MCU needs a high‑side switch (the `LED` pin must not be driven from a GPIO directly).
+Use a small PNP transistor (BC557, S8550, 2N3906): emitter to `3V3`, collector through the 47–100 Ω resistor to the module's `LED` pin, base through 1 kΩ to `GPIO5`,
+and 10 kΩ from base to emitter (keeps the backlight off while the pin floats at boot). GPIO low turns the backlight on, so provision with
+`SET bl_pin 5` and `SET bl_on 0`. Without the transistor the sleep window still works, but the screen is only drawn black and the backlight keeps glowing.
 
 ## Deliberate omissions
 

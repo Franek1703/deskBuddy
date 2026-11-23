@@ -1,5 +1,6 @@
 #include "settings.h"
 #include <Preferences.h>
+#include "sleep_schedule.h"
 
 static const char* NS = "deskbuddy";
 
@@ -28,6 +29,9 @@ void settingsLoad(Settings& s) {
   s.rowOff = p.getUChar("row_off", 0);
   s.blPin = (int8_t)p.getChar("bl_pin", -1);
   s.blOn = p.getBool("bl_on", true);
+  s.sleepWd = p.getString("sleep_wd", "");
+  s.sleepWe = p.getString("sleep_we", "");
+  s.tz = p.getString("tz", s.tz);
   p.end();
 }
 
@@ -76,6 +80,14 @@ bool settingsSet(Settings& s, const String& key, const String& value) {
   else if (key == "row_off" && parseInt(value, 0, 40, n)) { s.rowOff = n; p.putUChar("row_off", n); }
   else if (key == "bl_pin" && parseInt(value, -1, 21, n)) { s.blPin = n; p.putChar("bl_pin", n); }
   else if (key == "bl_on" && parseBool(value, b)) { s.blOn = b; p.putBool("bl_on", b); }
+  else if (key == "sleep_wd" || key == "sleep_we") {
+    SleepRule r;
+    if (parseSleepRule(value.c_str(), r)) {
+      if (key == "sleep_wd") s.sleepWd = value; else s.sleepWe = value;
+      p.putString(key.c_str(), value);
+    } else ok = false;
+  }
+  else if (key == "tz" && value.length() >= 3 && value.length() <= 64 && value.indexOf(' ') < 0) { s.tz = value; p.putString("tz", value); }
   else ok = false;
   p.end();
   return ok;
@@ -102,5 +114,7 @@ void settingsPrint(const Settings& s, Print& out) {
   out.printf("gw_ca=%s\n", mask(s.gwCa).c_str());
   out.printf("tft_mhz=%u tft_tab=%u tft_rot=%u tft_swaprb=%d tft_inv=%d col_off=%u row_off=%u bl_pin=%d bl_on=%d\n", s.tftMhz, s.tftTab,
              s.tftRot, s.swapRB, s.invert, s.colOff, s.rowOff, s.blPin, s.blOn);
+  out.printf("sleep_wd=%s sleep_we=%s tz=%s\n", s.sleepWd.length() ? s.sleepWd.c_str() : "off",
+             s.sleepWe.length() ? s.sleepWe.c_str() : "off", s.tz.c_str());
   out.printf("configured=%d\n", settingsConfigured(s));
 }

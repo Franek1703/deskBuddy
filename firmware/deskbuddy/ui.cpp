@@ -117,8 +117,13 @@ void drawCard(Adafruit_GFX& g, int y, const char* name, Rgb accent, const Servic
 
 namespace ui {
 
+static int8_t backlightPin = -1;
+static bool backlightOnLevel = true;
+
 void begin(const Settings& s) {
   swapRB = s.swapRB;
+  backlightPin = s.blPin;
+  backlightOnLevel = s.blOn;
   if (s.blPin >= 0) {
     pinMode(s.blPin, OUTPUT);
     digitalWrite(s.blPin, s.blOn ? HIGH : LOW);
@@ -133,6 +138,15 @@ void begin(const Settings& s) {
   tft->invertDisplay(s.invert);
   tft->fillScreen(0);
   if (!canvas) canvas = new GFXcanvas16(SCREEN_W, SCREEN_H);
+}
+
+void setDisplayOn(bool on) {
+  if (on) {
+    if (backlightPin >= 0) digitalWrite(backlightPin, backlightOnLevel ? HIGH : LOW);
+    return;
+  }
+  if (tft) tft->fillScreen(0);  // no DISPOFF/SLPIN: some modules turn white then, and a dark frame needs no re-init
+  if (backlightPin >= 0) digitalWrite(backlightPin, backlightOnLevel ? LOW : HIGH);
 }
 
 void showTestPattern(const Settings& s, const char* line1, const char* line2) {

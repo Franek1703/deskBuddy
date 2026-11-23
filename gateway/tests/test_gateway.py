@@ -12,7 +12,7 @@ import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
-from deskbuddy_gateway import model, payload  # noqa: E402
+from deskbuddy_gateway import model, payload, sleepcfg  # noqa: E402
 from deskbuddy_gateway.collector import Collector  # noqa: E402
 from deskbuddy_gateway.server import Gateway, KeyStore, make_ssl_context  # noqa: E402
 from deskbuddy_gateway.sources import SourceError  # noqa: E402
@@ -186,8 +186,8 @@ class ServerTests(unittest.TestCase):
         with open(self.keys, "w") as fh:
             fh.write("# keys\nesp32-test:%s\nspare:%s\n" % (self.KEY, "s" * 32))
 
-    def serve(self, ctx=None):
-        srv = Gateway(("127.0.0.1", 0), self.data, KeyStore(self.keys), ctx)
+    def serve(self, ctx=None, sleep=None):
+        srv = Gateway(("127.0.0.1", 0), self.data, KeyStore(self.keys), ctx, sleep)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         self.addCleanup(srv.server_close)
         self.addCleanup(srv.shutdown)
@@ -214,6 +214,14 @@ class ServerTests(unittest.TestCase):
         self.assertEqual((body["seq"], body["served"]), (7, 1))
         self.assertEqual(body["services"]["codex"]["windows"]["5h"]["percent"], 93)
         self.assertEqual(self.get(srv, "/v1/usage", key="s" * 32)[1]["served"], 2)
+
+    def test_sleep_schedule_is_relayed_only_when_configured(self):
+        srv = self.serve()
+        self.assertNotIn("sleep", self.get(srv, "/v1/usage", key=self.KEY)[1])
+        srv2 = self.serve(sleep=sleepcfg.SleepConfig("22:00-07:00", "23:30-09:00", "CET-1CEST,M3.5.0,M10.5.0/3"))
+        body = self.get(srv2, "/v1/usage", key=self.KEY)[1]
+        self.assertEqual(body["sleep"], {"weekdays": "22:00-07:00", "weekend": "23:30-09:00",
+                                         "tz": "CET-1CEST,M3.5.0,M10.5.0/3"})
 
     def test_healthz_is_open_and_missing_snapshot_is_served_as_missing(self):
         srv = self.serve()
@@ -243,6 +251,33 @@ class ServerTests(unittest.TestCase):
         self.assertEqual((code, body["seq"]), (200, 7))
         with self.assertRaises(urllib.error.URLError):  # a client without our CA must refuse
             self.get(srv, "/healthz", tls=ssl.create_default_context())
+
+
+class SleepConfigTests(unittest.TestCase):
+    def test_parse_rule(self):
+        self.assertEqual(sleepcfg.parse_rule("22:00-07:00"), "22:00-07:00")
+        self.assertEqual(sleepcfg.parse_rule(" 7:05-9:30 "), "07:05-09:30")
+        self.assertEqual(sleepcfg.parse_rule("OFF"), "off")
+        for bad in ("", "22:00", "24:00-07:00", "22:60-07:00", "22:00-22:00", "22-7", "22:00-07:00x", None):
+            self.assertIsNone(sleepcfg.parse_rule(bad), bad)
+
+    def test_parse_tz(self):
+        self.assertEqual(sleepcfg.parse_tz("CET-1CEST,M3.5.0,M10.5.0/3"), "CET-1CEST,M3.5.0,M10.5.0/3")
+        self.assertEqual(sleepcfg.parse_tz("UTC0"), "UTC0")
+        self.assertEqual(sleepcfg.parse_tz("EST5EDT,M3.2.0,M11.1.0"), "EST5EDT,M3.2.0,M11.1.0")
+        for bad in ("", "Europe/Warsaw", "CET", "x" * 80, None):
+            self.assertIsNone(sleepcfg.parse_tz(bad), bad)
+
+    def test_from_env_defaults_and_invalid_values(self):
+        d = sleepcfg.SleepConfig.from_env({})
+        self.assertEqual(d.as_dict(), {"weekdays": "22:00-07:00", "weekend": "22:00-07:00",
+                                       "tz": "CET-1CEST,M3.5.0,M10.5.0/3"})
+        c = sleepcfg.SleepConfig.from_env({"DESKBUDDY_SLEEP_WEEKDAYS": "21:30-06:45", "DESKBUDDY_SLEEP_WEEKEND": "off",
+                                           "DESKBUDDY_TZ": "UTC0"})
+        self.assertEqual((c.weekdays, c.weekend, c.tz), ("21:30-06:45", "off", "UTC0"))
+        with self.assertLogs("deskbuddy.sleep", level="WARNING"):
+            bad = sleepcfg.SleepConfig.from_env({"DESKBUDDY_SLEEP_WEEKDAYS": "nonsense", "DESKBUDDY_TZ": "Europe/Warsaw"})
+        self.assertEqual((bad.weekdays, bad.tz), ("22:00-07:00", "CET-1CEST,M3.5.0,M10.5.0/3"))
 
 
 if __name__ == "__main__":

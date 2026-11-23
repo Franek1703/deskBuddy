@@ -46,7 +46,8 @@ def _window(w: Dict[str, Any], now: int) -> Dict[str, Any]:
     }
 
 
-def build_usage_response(snapshot: Dict[str, Any], now: int, served: int) -> Dict[str, Any]:
+def build_usage_response(snapshot: Dict[str, Any], now: int, served: int,
+                         sleep: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     services: Dict[str, Any] = {}
     for name in SERVICES:
         svc = snapshot["services"][name]
@@ -60,10 +61,13 @@ def build_usage_response(snapshot: Dict[str, Any], now: int, served: int) -> Dic
             "retry_at": svc.get("retry_at"),
             "windows": {w: _window(svc["windows"][w], now) for w in WINDOWS},
         }
-    return {
+    body: Dict[str, Any] = {
         "schema": snapshot.get("schema", 1),
         "seq": snapshot.get("seq", 0),
         "served": served,
         "now": now,
         "services": services,
     }
+    if sleep:  # additive field: firmware that does not know it ignores it
+        body["sleep"] = dict(sleep)
+    return body

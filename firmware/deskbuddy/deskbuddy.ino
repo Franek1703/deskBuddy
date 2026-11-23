@@ -5,6 +5,7 @@
 #include "diag.h"
 #include "gateway_client.h"
 #include "settings.h"
+#include "sleep_schedule.h"
 #include "ui.h"
 #include "usage_data.h"
 
@@ -15,6 +16,73 @@ static GatewayClient client;
 static String line;
 static uint32_t lastRenderMs = 0, lastRenderedFetch = 0;
 static bool showingTest = false;
+
+// Sleep window: screen dark, Wi-Fi off, no polling. WAKING = Wi-Fi is coming back; the screen stays dark until the
+// first fetch (or a timeout) so the morning never starts with stale numbers.
+enum SleepState : uint8_t { AWAKE, SLEEPING, WAKING };
+static SleepState sleepState = AWAKE;
+static uint32_t wakeStartMs = 0, wakeFetchBase = 0, forceSleepUntilMs = 0, lastSleepCheckMs = 0;
+static String appliedTz;
+static const uint32_t WAKE_TIMEOUT_MS = 20000;
+
+static const char* sleepName() { return sleepState == AWAKE ? "awake" : sleepState == SLEEPING ? "sleeping" : "waking"; }
+
+static void applyTz() {
+  if (appliedTz == settings.tz) return;
+  setenv("TZ", settings.tz.c_str(), 1);
+  tzset();
+  appliedTz = settings.tz;
+}
+
+// Local wall clock from NTP time; false until a real NTP sync happened.
+static bool localClock(struct tm& out) {
+  if (!client.clockTrusted()) return false;
+  applyTz();
+  time_t t = time(nullptr);
+  localtime_r(&t, &out);
+  return true;
+}
+
+static bool scheduleSaysSleep() {
+  struct tm tmv;
+  if (!localClock(tmv)) return false;  // never sleep on an unverified clock
+  SleepRule wd, we;
+  parseSleepRule(settings.sleepWd.c_str(), wd);
+  parseSleepRule(settings.sleepWe.c_str(), we);
+  return shouldSleep(wd, we, tmv.tm_wday, tmv.tm_hour * 60 + tmv.tm_min);
+}
+
+static void updateSleep(uint32_t now) {
+  bool forced = forceSleepUntilMs && (int32_t)(now - forceSleepUntilMs) < 0;
+  if (!forced) forceSleepUntilMs = 0;
+  bool want = forced || scheduleSaysSleep();
+  switch (sleepState) {
+    case AWAKE:
+    case WAKING:
+      if (want) {
+        ui::setDisplayOn(false);
+        client.sleep(true);
+        sleepState = SLEEPING;
+        Serial.println("SLEEP enter");
+      } else if (sleepState == WAKING && (client.fetchCount() != wakeFetchBase || now - wakeStartMs > WAKE_TIMEOUT_MS)) {
+        ui::render(client.data(), client.net(), now, client.lastOkMs());  // paint while the backlight is still off
+        ui::setDisplayOn(true);
+        lastRenderMs = now;
+        sleepState = AWAKE;
+        Serial.printf("SLEEP wake done fetched=%d\n", client.fetchCount() != wakeFetchBase);
+      }
+      break;
+    case SLEEPING:
+      if (!want) {
+        client.sleep(false);
+        wakeStartMs = now;
+        wakeFetchBase = client.fetchCount();
+        sleepState = WAKING;
+        Serial.println("SLEEP waking");
+      }
+      break;
+  }
+}
 
 static const char* netName(NetState n) {
   switch (n) {
@@ -29,12 +97,16 @@ static const char* netName(NetState n) {
 }
 
 static void printStatus() {
+  char localHm[8] = "--:--";
+  struct tm tmv;
+  if (localClock(tmv)) snprintf(localHm, sizeof localHm, "%02d:%02d", tmv.tm_hour, tmv.tm_min);
   const UsageData& d = client.data();
-  Serial.printf("STATUS net=%s wifi=%s rssi=%d ip=%s time=%s http=%d fetches=%u seq=%u served=%u heap=%u up=%us reset=%s abnormal=%u disc=%u discn=%u firstip=%us\n",
+  Serial.printf("STATUS net=%s wifi=%s rssi=%d ip=%s time=%s http=%d fetches=%u seq=%u served=%u heap=%u up=%us reset=%s abnormal=%u disc=%u discn=%u firstip=%us sleep=%s local=%s clock=%d epoch=%ld\n",
                 netName(client.net()), WiFi.status() == WL_CONNECTED ? "up" : "down", WiFi.RSSI(),
                 WiFi.localIP().toString().c_str(), client.timeSynced() ? "synced" : "unsynced", client.lastHttp(),
                 client.fetchCount(), d.seq, d.served, ESP.getFreeHeap(), millis() / 1000, diag::resetName(), diag::abnormalResets(),
-                diag::lastDisconnectReason(), (unsigned)diag::disconnectCount(), (unsigned)(diag::firstIpMs() / 1000));
+                diag::lastDisconnectReason(), (unsigned)diag::disconnectCount(), (unsigned)(diag::firstIpMs() / 1000), sleepName(),
+                localHm, client.clockTrusted(), (long)time(nullptr));
 }
 
 static void handleLine(String cmd) {
@@ -45,7 +117,7 @@ static void handleLine(String cmd) {
   String rest = sp < 0 ? "" : cmd.substring(sp + 1);
   verb.toUpperCase();
   if (verb == "HELP") {
-    Serial.println("OK commands: HELP STATUS GET SET <key> <value> CLEAR TEST (hold pattern) APPLY (re-init + resume) FETCH SCAN WIFI_BOUNCE [sec] REBOOT");
+    Serial.println("OK commands: HELP STATUS GET SET <key> <value> CLEAR TEST (hold pattern) APPLY (re-init + resume) FETCH SCAN WIFI_BOUNCE [sec] SLEEP_NOW [sec] REBOOT");
   } else if (verb == "STATUS") {
     printStatus();
   } else if (verb == "GET") {
@@ -62,6 +134,7 @@ static void handleLine(String cmd) {
     Serial.println("OK cleared; REBOOT to apply");
   } else if (verb == "TEST" || verb == "APPLY") {
     ui::begin(settings);  // re-init the panel with the current tft_* values
+    if (sleepState == SLEEPING) ui::setDisplayOn(false);  // begin() switches the backlight on
     if (verb == "TEST") {
       ui::showTestPattern(settings, "TEST PATTERN", "bar1 must be RED");
       showingTest = true;  // held until APPLY or reboot
@@ -84,6 +157,11 @@ static void handleLine(String cmd) {
                     WiFi.encryptionType(i) == WIFI_AUTH_OPEN);
     WiFi.scanDelete();
     Serial.printf("OK %d networks\n", n);
+  } else if (verb == "SLEEP_NOW") {  // test helper: behave as if the schedule said "sleep" for a while
+    long secs = rest.length() ? rest.toInt() : 20;
+    forceSleepUntilMs = millis() + (uint32_t)constrain(secs, 1, 3600) * 1000UL;
+    if (!forceSleepUntilMs) forceSleepUntilMs = 1;
+    Serial.printf("OK sleeping for %lds\n", constrain(secs, 1, 3600));
   } else if (verb == "REBOOT") {
     Serial.println("OK rebooting");
     Serial.flush();
@@ -126,7 +204,15 @@ void loop() {
   pollSerial();
   client.tick();
   uint32_t now = millis();
-  if (!showingTest) {
+  if (!showingTest && now - lastSleepCheckMs >= 1000) {
+    lastSleepCheckMs = now;
+    updateSleep(now);
+  }
+  if (sleepState == SLEEPING) {  // dark and quiet: only the serial console stays alive
+    delay(200);
+    return;
+  }
+  if (!showingTest && sleepState == AWAKE) {
     if (client.fetchCount() != lastRenderedFetch || now - lastRenderMs >= 1000) {
       ui::render(client.data(), client.net(), now, client.lastOkMs());
       lastRenderMs = now;

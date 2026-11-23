@@ -15,6 +15,7 @@ from typing import Dict, Optional, Tuple
 
 from .model import load_snapshot
 from .payload import build_usage_response
+from .sleepcfg import SleepConfig
 
 log = logging.getLogger("deskbuddy.gateway")
 
@@ -58,9 +59,10 @@ class Gateway(ThreadingHTTPServer):
     daemon_threads = True
 
     def __init__(self, addr: Tuple[str, int], data_path: str, keys: KeyStore,
-                 ssl_context: Optional[ssl.SSLContext] = None):
+                 ssl_context: Optional[ssl.SSLContext] = None, sleep: Optional[SleepConfig] = None):
         self.data_path = data_path
         self.keys = keys
+        self.sleep = sleep
         self.ssl_context = ssl_context
         self.served = 0
         self.lock = threading.Lock()
@@ -127,7 +129,8 @@ class Handler(BaseHTTPRequestHandler):
         with self.server.lock:
             self.server.served += 1
             served = self.server.served
-        body = build_usage_response(snap, int(time.time()), served)
+        body = build_usage_response(snap, int(time.time()), served,
+                                    self.server.sleep.as_dict() if self.server.sleep else None)
         size = self._send(200, body)
         self._access(200, device, size, " seq=%d served=%d" % (snap["seq"], served))
 
@@ -153,8 +156,10 @@ def main(argv: Optional[list] = None) -> int:
     ctx = make_ssl_context(args.cert, args.key) if args.cert else None
     if ctx is None:
         log.warning("no --cert given: serving plain HTTP (testing only)")
+    sleep = SleepConfig.from_env(os.environ)
+    log.info("sleep schedule: weekdays=%s weekend=%s tz=%s", sleep.weekdays, sleep.weekend, sleep.tz)
     srv = Gateway((args.host, args.port), os.path.join(args.data_dir, "usage.json"),
-                  KeyStore(args.keys_file), ctx)
+                  KeyStore(args.keys_file), ctx, sleep)
     log.info("gateway listening on %s:%d (%s)", args.host, args.port, "https" if ctx else "http")
     try:
         srv.serve_forever()

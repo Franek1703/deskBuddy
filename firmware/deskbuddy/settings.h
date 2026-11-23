@@ -19,6 +19,9 @@ struct Settings {
   uint8_t colOff = 0, rowOff = 0;
   int8_t blPin = -1;       // -1: backlight not driven by the MCU
   bool blOn = true;        // pin level that lights the backlight
+  // Sleep schedule (screen off, Wi-Fi off). Rules are "HH:MM-HH:MM" or "off"/empty; the gateway's values overwrite these.
+  String sleepWd, sleepWe;                          // weekdays (Mon-Fri) and weekend (Sat-Sun)
+  String tz = "CET-1CEST,M3.5.0,M10.5.0/3";         // POSIX TZ string used to turn NTP time into local time
 };
 
 bool settingsConfigured(const Settings& s);

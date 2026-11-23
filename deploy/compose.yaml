@@ -13,6 +13,11 @@ services:
       DESKBUDDY_CERT: /secrets/server.pem
       DESKBUDDY_KEY: /secrets/server.key
       DESKBUDDY_PORT: "8443"
+      # Device sleep schedule (screen off, Wi-Fi off): HH:MM-HH:MM local time, or "off".
+      # Weekend = Saturday + Sunday, evaluated on the local day of the current moment.
+      DESKBUDDY_SLEEP_WEEKDAYS: "22:00-07:00"
+      DESKBUDDY_SLEEP_WEEKEND: "22:00-07:00"
+      DESKBUDDY_TZ: "CET-1CEST,M3.5.0,M10.5.0/3"   # POSIX TZ string (Europe/Warsaw incl. DST)
     volumes:
       - ${DESKBUDDY_DATA:-./local/data}:/data:ro        # written by the host collector
       - ${DESKBUDDY_SECRETS:-./local/secrets}:/secrets:ro
