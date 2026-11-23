@@ -14,6 +14,7 @@ struct Settings {
   uint8_t tftRot = 0;      // 0..3
   bool swapRB = false;     // software red/blue swap if the panel is BGR
   bool invert = false;
+  uint8_t tftMhz = 8;      // SPI clock; lower it if the picture is skewed or noisy
   uint8_t colOff = 0, rowOff = 0;
   int8_t blPin = -1;       // -1: backlight not driven by the MCU
   bool blOn = true;        // pin level that lights the backlight

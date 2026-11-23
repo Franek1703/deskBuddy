@@ -126,6 +126,7 @@ void begin(const Settings& s) {
   if (!tft) tft = new Panel(&SPI, PIN_TFT_CS, PIN_TFT_DC, PIN_TFT_RST);
   static const uint8_t tabs[] = {INITR_GREENTAB, INITR_REDTAB, INITR_BLACKTAB};
   tft->initR(tabs[s.tftTab > 2 ? 2 : s.tftTab]);
+  tft->setSPISpeed((uint32_t)s.tftMhz * 1000000UL);  // initR runs at the library default (24 MHz); drop it now
   if (s.colOff || s.rowOff) tft->setOffsets(s.colOff, s.rowOff);
   tft->setRotation(s.tftRot);
   tft->invertDisplay(s.invert);
@@ -149,7 +150,7 @@ void showTestPattern(const Settings& s, const char* line1, const char* line2) {
   textAt(g, 4, 108, line1, C(255, 255, 0));
   textAt(g, 4, 120, line2, C(0, 255, 255));
   char buf[40];
-  snprintf(buf, sizeof buf, "tab%u rot%u rb%u inv%u", s.tftTab, s.tftRot, s.swapRB, s.invert);
+  snprintf(buf, sizeof buf, "tab%u rot%u rb%u inv%u %uM", s.tftTab, s.tftRot, s.swapRB, s.invert, s.tftMhz);
   textAt(g, 4, 132, buf, C(160, 160, 160));
   // 1 px frame + asymmetric corner marks: frame cut off = offset wrong, mirrored text = rotation wrong.
   g.drawRect(0, 0, SCREEN_W, SCREEN_H, C(255, 255, 255));
