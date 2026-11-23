@@ -2,6 +2,7 @@
 // Settings (Wi-Fi, gateway address/key/CA, panel variant) live in NVS and are written over USB serial:
 // see tools/provision.py. Serial lines: FETCH ok ... / RENDER seq=.. served=.. are matched against gateway logs.
 #include <WiFi.h>
+#include "diag.h"
 #include "gateway_client.h"
 #include "settings.h"
 #include "ui.h"
@@ -29,10 +30,11 @@ static const char* netName(NetState n) {
 
 static void printStatus() {
   const UsageData& d = client.data();
-  Serial.printf("STATUS net=%s wifi=%s rssi=%d ip=%s time=%s http=%d fetches=%u seq=%u served=%u heap=%u up=%us\n",
+  Serial.printf("STATUS net=%s wifi=%s rssi=%d ip=%s time=%s http=%d fetches=%u seq=%u served=%u heap=%u up=%us reset=%s abnormal=%u disc=%u discn=%u firstip=%us\n",
                 netName(client.net()), WiFi.status() == WL_CONNECTED ? "up" : "down", WiFi.RSSI(),
                 WiFi.localIP().toString().c_str(), client.timeSynced() ? "synced" : "unsynced", client.lastHttp(),
-                client.fetchCount(), d.seq, d.served, ESP.getFreeHeap(), millis() / 1000);
+                client.fetchCount(), d.seq, d.served, ESP.getFreeHeap(), millis() / 1000, diag::resetName(), diag::abnormalResets(),
+                diag::lastDisconnectReason(), (unsigned)diag::disconnectCount(), (unsigned)(diag::firstIpMs() / 1000));
 }
 
 static void handleLine(String cmd) {
@@ -105,12 +107,14 @@ static void pollSerial() {
 }
 
 void setup() {
+  diag::begin();
   Serial.setRxBufferSize(8192);  // the CA certificate arrives as one long line
   Serial.begin(115200);
   delay(300);
   settingsLoad(settings);
   ui::begin(settings);
-  Serial.printf("BOOT fw=%s build=%s %s configured=%d\n", FW_VERSION, __DATE__, __TIME__, settingsConfigured(settings));
+  Serial.printf("BOOT fw=%s build=%s %s configured=%d reset=%s abnormal=%u\n", FW_VERSION, __DATE__, __TIME__,
+                settingsConfigured(settings), diag::resetName(), diag::abnormalResets());
   if (!settingsConfigured(settings)) {
     ui::showTestPattern(settings, "NOT CONFIGURED", "run tools/provision.py");
     showingTest = true;

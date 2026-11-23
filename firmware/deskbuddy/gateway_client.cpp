@@ -33,7 +33,8 @@ void GatewayClient::begin(const Settings& s) {
   WiFi.setAutoReconnect(true);
   WiFi.setSleep(false);
   WiFi.begin(s.wifiSsid.c_str(), s.wifiPass.c_str());
-  WiFi.setTxPower(WIFI_POWER_8_5dBm);  // Super Mini boards drop the link at full power
+  // Super Mini boards drop the link at full power, hence the 8.5 dBm default; `SET wifi_tx <dBm>` overrides it.
+  WiFi.setTxPower(s.wifiTx ? (wifi_power_t)(s.wifiTx * 4) : WIFI_POWER_8_5dBm);  // quarter-dBm units
   lastWifiTryMs_ = millis();
   net_ = NET_NO_WIFI;
 }

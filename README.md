@@ -85,6 +85,15 @@ Serial commands (115200): `HELP STATUS GET SET <key> <value> CLEAR TEST APPLY FE
 Panel settings: `tft_tab` (0 green, 1 red, 2 black; this module works with 2), `tft_mhz` (SPI clock, default 8; at 24 MHz the picture was garbled), `tft_rot` (0 or 2), `tft_swaprb`, `tft_inv`, `col_off`, `row_off`, `bl_pin`, `bl_on`.
 `TEST` draws a test plate (8 colour bars, a frame, corner markers); `APPLY` returns to the limits screen after changing settings.
 
+**Wi‑Fi TX power.** `wifi_tx` sets the transmit power in whole dBm (2–20); `0` keeps the 8.5 dBm default. The default is low because Super Mini boards can drop the link at full power,
+but on some USB power sources (e.g. a lamp's built‑in port) 8.5 dBm was not enough to finish authentication (`d2`), while `SET wifi_tx 13` connected within 5–6 s.
+
+**Wi‑Fi diagnostics without a computer.** While Wi‑Fi is down the status line reads e.g. `NO WIFI d201 B2`: `d<n>` is the last Wi‑Fi disconnect reason
+(201 no AP found, 202 auth failed, 15 4‑way handshake timeout, 200 beacon timeout; the device's own retries are not counted) and `B`/`P`/`W` + count is the number of
+brownout / panic / watchdog resets since the last power‑on (the counter survives a reset but not a power cycle). Over USB, `BOOT` and `STATUS` also print `reset=`,
+`abnormal=`, `disc=`, `discn=` and `firstip=` (seconds until the first IP), and `WIFI disconnected reason=…` / `WIFI got_ip` lines appear as events happen.
+Do not send `SCAN` while the device is still connecting: it interrupts the connection attempt.
+
 **Backlight.** Connect the module's `LED` pin (red "1.8 TFT SPI 128*160 V1.1" board) to `3V3` through a 47–100 Ω resistor; without it the screen stays dark.
 Do not drive it from a GPIO (too much current) or from 5 V. The manufacturer notes that the description of this pin is inconsistent, so check the requirements of any other module.
 

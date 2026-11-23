@@ -1,4 +1,5 @@
 #include "ui.h"
+#include "diag.h"
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7735.h>
 #include <SPI.h>
@@ -181,11 +182,17 @@ void render(const UsageData& d, NetState net, uint32_t nowMs, uint32_t lastOkMs)
     case NET_UNAUTHORIZED: msg = "BAD KEY"; c = RED; break;
     case NET_BAD_REPLY: msg = "BAD REPLY"; c = RED; break;
   }
+  char diagTxt[16] = "";
+  if (net == NET_NO_WIFI) {  // field diagnostics: d<last disconnect reason> B/P/W<abnormal resets since power-on>
+    int n = 0;
+    if (diag::lastDisconnectReason()) n += snprintf(diagTxt + n, sizeof diagTxt - n, " d%u", diag::lastDisconnectReason());
+    if (diag::abnormalResets()) snprintf(diagTxt + n, sizeof diagTxt - n, " %c%u", diag::abnormalLetter(), diag::abnormalResets());
+  }
   if (!netOk && lastOkMs) {
     fmtAge((nowMs - lastOkMs) / 1000, age, sizeof age);
-    snprintf(buf, sizeof buf, "%s %s", msg, age);
+    snprintf(buf, sizeof buf, "%s %s%s", msg, age, diagTxt);
   } else {
-    snprintf(buf, sizeof buf, "%s", msg);
+    snprintf(buf, sizeof buf, "%s%s", msg, diagTxt);
   }
   textAt(g, 4, 152, buf, col(c));
   if (d.valid) {

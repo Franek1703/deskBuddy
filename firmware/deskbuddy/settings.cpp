@@ -18,6 +18,7 @@ void settingsLoad(Settings& s) {
   s.gwCa = p.getString("gw_ca", "");
   s.gwTls = p.getBool("gw_tls", true);
   s.pollS = p.getUShort("poll_s", 30);
+  s.wifiTx = p.getUChar("wifi_tx", 0);
   s.tftTab = p.getUChar("tft_tab", 2);
   s.tftRot = p.getUChar("tft_rot", 0);
   s.swapRB = p.getBool("tft_swaprb", false);
@@ -64,6 +65,7 @@ bool settingsSet(Settings& s, const String& key, const String& value) {
   }
   else if (key == "gw_port" && parseInt(value, 1, 65535, n)) { s.gwPort = n; p.putUShort("gw_port", n); }
   else if (key == "gw_tls" && parseBool(value, b)) { s.gwTls = b; p.putBool("gw_tls", b); }
+  else if (key == "wifi_tx" && parseInt(value, 0, 20, n) && (n == 0 || n >= 2)) { s.wifiTx = n; p.putUChar("wifi_tx", n); }
   else if (key == "poll_s" && parseInt(value, 5, 3600, n)) { s.pollS = n; p.putUShort("poll_s", n); }
   else if (key == "tft_tab" && parseInt(value, 0, 2, n)) { s.tftTab = n; p.putUChar("tft_tab", n); }
   else if (key == "tft_rot" && parseInt(value, 0, 2, n) && n != 1) { s.tftRot = n; p.putUChar("tft_rot", n); }
@@ -94,8 +96,8 @@ static String mask(const String& v) {
 void settingsPrint(const Settings& s, Print& out) {
   out.printf("wifi_ssid=%s\n", s.wifiSsid.length() ? s.wifiSsid.c_str() : "(unset)");
   out.printf("wifi_pass=%s\n", mask(s.wifiPass).c_str());
-  out.printf("gw_host=%s gw_port=%u gw_tls=%d poll_s=%u\n", s.gwHost.length() ? s.gwHost.c_str() : "(unset)",
-             s.gwPort, s.gwTls, s.pollS);
+  out.printf("gw_host=%s gw_port=%u gw_tls=%d poll_s=%u wifi_tx=%u\n", s.gwHost.length() ? s.gwHost.c_str() : "(unset)",
+             s.gwPort, s.gwTls, s.pollS, s.wifiTx);
   out.printf("gw_key=%s\n", mask(s.gwKey).c_str());
   out.printf("gw_ca=%s\n", mask(s.gwCa).c_str());
   out.printf("tft_mhz=%u tft_tab=%u tft_rot=%u tft_swaprb=%d tft_inv=%d col_off=%u row_off=%u bl_pin=%d bl_on=%d\n", s.tftMhz, s.tftTab,

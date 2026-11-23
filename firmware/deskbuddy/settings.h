@@ -10,6 +10,7 @@ struct Settings {
   String gwCa;             // PEM of the local CA (empty = no TLS trust configured)
   bool gwTls = true;
   uint16_t pollS = 30;
+  uint8_t wifiTx = 0;      // Wi-Fi TX power in whole dBm (2..20); 0 = 8.5 dBm default for Super Mini boards
   uint8_t tftTab = 2;      // 0 green, 1 red, 2 black (Adafruit INITR_*)
   uint8_t tftRot = 0;      // 0..3
   bool swapRB = false;     // software red/blue swap if the panel is BGR
