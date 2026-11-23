@@ -128,7 +128,10 @@ void loop() {
       lastRenderMs = now;
       if (client.fetchCount() != lastRenderedFetch) {
         lastRenderedFetch = client.fetchCount();
-        Serial.printf("RENDER seq=%u served=%u net=%s\n", client.data().seq, client.data().served, netName(client.net()));
+        const UsageData& d = client.data();
+        auto pct = [](const WindowData& w) { return w.has ? (int)lroundf(w.percent) : -1; };
+        Serial.printf("RENDER seq=%u served=%u net=%s codex5h=%d codex7d=%d claude5h=%d claude7d=%d\n", d.seq, d.served,
+                      netName(client.net()), pct(d.codex.w5), pct(d.codex.w7), pct(d.claude.w5), pct(d.claude.w7));
       }
     }
   }
