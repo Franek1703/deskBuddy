@@ -82,11 +82,11 @@ python3 tools/serial_log.py --seconds 60                                 # BOOT 
 ```
 
 Komendy portu szeregowego (115200): `HELP STATUS GET SET <klucz> <wartość> CLEAR TEST APPLY FETCH SCAN WIFI_BOUNCE [s] REBOOT`.
-Ustawienia panelu: `tft_tab` (0 green, 1 red, 2 black), `tft_rot` (0 lub 2), `tft_swaprb`, `tft_inv`, `col_off`, `row_off`, `bl_pin`, `bl_on`.
+Ustawienia panelu: `tft_tab` (0 green, 1 red, 2 black; ten moduł działa z 2), `tft_mhz` (zegar SPI, domyślnie 8; przy 24 MHz obraz był poszatkowany), `tft_rot` (0 lub 2), `tft_swaprb`, `tft_inv`, `col_off`, `row_off`, `bl_pin`, `bl_on`.
 `TEST` rysuje planszę (8 pasków, ramka, znaczniki rogów), `APPLY` wraca do ekranu limitów po zmianie ustawień.
 
-**Podświetlenie.** Producent modułu zaznacza, że opis pinu `LED` jest niespójny i nie wolno go podłączać do 3,3 V ani 5 V bez sprawdzenia wymagań.
-Jeśli ekran jest ciemny, ale pod skosem w silnym świetle widać obraz, logika działa, a brakuje tylko podświetlenia.
+**Podświetlenie.** Pin `LED` modułu (czerwona płytka „1.8 TFT SPI 128*160 V1.1”) podłączony do `3V3` przez rezystor 47–100 Ω; bez tego ekran jest ciemny.
+Nie podłączaj go do GPIO (za duży prąd) ani do 5 V. Producent zaznacza, że opis tego pinu jest niespójny, więc przy innym module sprawdź jego wymagania.
 
 ## Testy
 
