@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>pl.deskbuddy.collector</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>-m</string>
+    <string>deskbuddy_gateway.collector</string>
+    <string>--data-dir</string><string>@REPO@/deploy/local/data</string>
+    <string>--codex-bin</string><string>@CODEX_BIN@</string>
+    <string>--claude-cmd</string><string>@CLAUDE_BIN@ -p /usage</string>
+  </array>
+  <key>WorkingDirectory</key><string>@REPO@/gateway</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>@NODE_BIN_DIR@:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>30</integer>
+  <key>StandardOutPath</key><string>@REPO@/deploy/local/collector.log</string>
+  <key>StandardErrorPath</key><string>@REPO@/deploy/local/collector.log</string>
+</dict>
+</plist>

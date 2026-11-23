@@ -1,0 +1,18 @@
+# local-only material: CAD, environment data, secrets
+cad/
+firebase-debug.log
+result.json
+.DS_Store
+.claude/
+graphify-out/
+
+# generated / secrets
+deploy/local/
+**/__pycache__/
+*.pyc
+*.pem
+*.key
+device_keys.txt
+wifi.pass
+.env
+firmware/**/build/

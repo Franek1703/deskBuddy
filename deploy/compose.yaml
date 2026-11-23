@@ -1,0 +1,22 @@
+# docker compose -f deploy/compose.yaml up -d --build
+services:
+  gateway:
+    build: ../gateway
+    image: deskbuddy-gateway:local
+    container_name: deskbuddy-gateway
+    restart: unless-stopped
+    ports:
+      - "8443:8443"
+    environment:
+      DESKBUDDY_DATA_DIR: /data
+      DESKBUDDY_KEYS_FILE: /secrets/device_keys.txt
+      DESKBUDDY_CERT: /secrets/server.pem
+      DESKBUDDY_KEY: /secrets/server.key
+      DESKBUDDY_PORT: "8443"
+    volumes:
+      - ${DESKBUDDY_DATA:-./local/data}:/data:ro        # written by the host collector
+      - ${DESKBUDDY_SECRETS:-./local/secrets}:/secrets:ro
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true

@@ -1,0 +1,43 @@
+{
+  "generated_at": 1795426306,
+  "schema": 1,
+  "seq": 1,
+  "services": {
+    "claude": {
+      "error": null,
+      "failures": 0,
+      "interval_s": 300,
+      "last_attempt_at": 1795426300,
+      "last_success_at": 1795426300,
+      "retry_at": null,
+      "windows": {
+        "5h": {
+          "resets_at": 1795482106,
+          "used_percent": 8.0
+        },
+        "7d": {
+          "resets_at": 1795433506,
+          "used_percent": 10.0
+        }
+      }
+    },
+    "codex": {
+      "error": null,
+      "failures": 0,
+      "interval_s": 120,
+      "last_attempt_at": 1795426300,
+      "last_success_at": 1795426300,
+      "retry_at": null,
+      "windows": {
+        "5h": {
+          "resets_at": 1795477579,
+          "used_percent": 93.0
+        },
+        "7d": {
+          "resets_at": 1795474708,
+          "used_percent": 23.0
+        }
+      }
+    }
+  }
+}
