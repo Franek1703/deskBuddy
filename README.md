@@ -94,8 +94,9 @@ brownout / panic / watchdog resets since the last power‑on (the counter surviv
 `abnormal=`, `disc=`, `discn=` and `firstip=` (seconds until the first IP), and `WIFI disconnected reason=…` / `WIFI got_ip` lines appear as events happen.
 Do not send `SCAN` while the device is still connecting: it interrupts the connection attempt.
 
-**Backlight.** Connect the module's `LED` pin (red "1.8 TFT SPI 128*160 V1.1" board) to `3V3` through a 47–100 Ω resistor; without it the screen stays dark.
-Do not drive it from a GPIO directly (too much current; use the transistor described under *Sleep schedule*) or from 5 V. The manufacturer notes that the description of this pin is inconsistent, so check the requirements of any other module.
+**Backlight.** The module's `LED` pin (red "1.8 TFT SPI 128*160 V1.1" board) is the backlight anode and needs a series resistor of 47–100 Ω; without a supply it stays dark.
+Connect it either to `3V3` (always on) or, to let the sleep schedule switch it, to `GPIO5` (see *Sleep schedule*). Do not connect it to 5 V.
+The manufacturer notes that the description of this pin is inconsistent, so check the requirements of any other module.
 
 ## Tests
 
@@ -148,10 +149,11 @@ python3 tools/serial_log.py --seconds 40 --send "SLEEP_NOW 20" --send STATUS   #
 clang++ -std=c++17 -I firmware/deskbuddy firmware/tests/test_sleep_schedule.cpp -o /tmp/t && /tmp/t   # schedule logic unit test
 ```
 
-**Switching the backlight off.** `LED` is the backlight anode, so the MCU needs a high‑side switch (the `LED` pin must not be driven from a GPIO directly).
-Use a small PNP transistor (BC557, S8550, 2N3906): emitter to `3V3`, collector through the 47–100 Ω resistor to the module's `LED` pin, base through 1 kΩ to `GPIO5`,
-and 10 kΩ from base to emitter (keeps the backlight off while the pin floats at boot). GPIO low turns the backlight on, so provision with
-`SET bl_pin 5` and `SET bl_on 0`. Without the transistor the sleep window still works, but the screen is only drawn black and the backlight keeps glowing.
+**Switching the backlight off.** Wire `GPIO5` → 47–100 Ω resistor → the module's `LED` pin (no connection to `3V3`), then provision with
+`SET bl_pin 5` and `SET bl_on 1` (high = backlight on; `bl_on 0` inverts it for an inverting driver). No transistor is needed: the series resistor limits the current to roughly 10 mA,
+well within what an ESP32‑C3 pin can source. Keep the resistor at 47 Ω or more. Verified on hardware: the backlight goes dark for the whole `SLEEP_NOW` period and returns after the first fetch.
+If the backlight were ever too weak or the module draws more current, use a high‑side PNP (BC557/S8550/2N3906: emitter to `3V3`, collector through the resistor to `LED`, base through 1 kΩ to the GPIO,
+10 kΩ base‑to‑emitter) with `SET bl_on 0`. Without `bl_pin` the sleep window still works, but the screen is only drawn black and the backlight keeps glowing.
 
 ## Deliberate omissions
 
