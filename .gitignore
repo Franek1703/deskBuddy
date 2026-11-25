@@ -7,6 +7,8 @@
 !/cad/v6/print/STL/
 /cad/v6/print/STL/*
 !/cad/v6/print/STL/*.stl
+!/cad/v6/print/STL/LICENSE
+!/cad/v6/print/STL/NOTICE
 
 # local-only material
 firebase-debug.log

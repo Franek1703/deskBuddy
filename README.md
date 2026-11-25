@@ -236,4 +236,6 @@ Include your board and display model when reporting a hardware issue. For enclos
 
 ## License
 
-Licensing for the software and enclosure files is pending.
+- **Software** — the firmware, collector, gateway, and project tools are licensed under the [MIT License](LICENSE).
+- **Enclosure** — the v6 STL files are licensed under [CERN-OHL-P-2.0](cad/v6/print/STL/LICENSE). The [enclosure notice](cad/v6/print/STL/NOTICE) accompanies the print files.
+- **Project photos** — all rights reserved.
