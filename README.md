@@ -2,6 +2,12 @@
 
 DeskBuddy is a 3D-printed desktop robot with an ESP32-C3 and a 1.8-inch display. It shows how much of your Codex and Claude Code subscription limits you have used and when each limit resets. The screen shows the 5-hour and 7-day windows for both services.
 
+<p align="center">
+  <img src="docs/images/deskbuddy-close-up.jpg" width="30%" alt="Close-up of the assembled DeskBuddy with its usage display on">
+  <img src="docs/images/deskbuddy-on-desk.jpg" width="30%" alt="Assembled DeskBuddy beside a keyboard and monitor">
+  <img src="docs/images/deskbuddy-during-assembly.jpg" width="30%" alt="DeskBuddy with the display running before the arms, feet and antenna are fitted">
+</p>
+
 [Hardware and wiring](#hardware-and-wiring) · [Print the enclosure](#print-the-v6-enclosure) · [Set up the gateway](#set-up-the-gateway) · [Flash the ESP32](#flash-and-provision-the-esp32) · [Troubleshooting](#troubleshooting)
 
 ## How it works
