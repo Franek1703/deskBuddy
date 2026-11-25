@@ -1,5 +1,14 @@
-# local-only material: CAD, environment data, secrets
-cad/
+# CAD working files, with an exception for the v6 print meshes
+/cad/*
+!/cad/v6/
+/cad/v6/*
+!/cad/v6/print/
+/cad/v6/print/*
+!/cad/v6/print/STL/
+/cad/v6/print/STL/*
+!/cad/v6/print/STL/*.stl
+
+# local-only material
 firebase-debug.log
 result.json
 .DS_Store
