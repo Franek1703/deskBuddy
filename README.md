@@ -14,14 +14,14 @@ DeskBuddy is a 3D-printed desktop robot with an ESP32-C3 and a 1.8-inch display.
 
 ```mermaid
 flowchart LR
-    Codex["Codex CLI"] --> Collector["Collector on your Mac"]
+    Codex["Codex CLI"] --> Collector["Usage collector"]
     Claude["Claude Code CLI"] --> Collector
     Collector --> Snapshot["usage.json"]
     Snapshot --> Gateway["HTTPS gateway"]
     Gateway -->|LAN| Display["ESP32-C3 display"]
 ```
 
-The collector uses the CLI sessions signed in on your Mac. It reads Codex every two minutes through `codex app-server` and Claude Code every five minutes through `claude -p /usage`. The ESP32 polls the gateway every 30 seconds by default and authenticates with its own device key. Your CLI credentials stay on the Mac.
+The collector runs on a computer or server with access to signed-in Codex CLI and Claude Code sessions. It reads Codex every two minutes through `codex app-server` and Claude Code every five minutes through `claude -p /usage`. The gateway can share that host or run on another device with access to `usage.json`. The ESP32 polls the gateway over the local network every 30 seconds by default and authenticates with its own device key.
 
 The collector keeps the last successful values if a read fails. The gateway flags an existing reading as stale when its source is rate-limited or when it is older than three polling intervals. If a countdown reaches zero, the usage percentage stays at its last reported value until a fresh reading arrives.
 
@@ -30,7 +30,7 @@ The collector keeps the last successful values if a read fails. The gateway flag
 - ESP32-C3 Super Mini with USB-C and a USB data cable.
 - 1.8-inch ST7735 SPI TFT, 128 × 160 pixels. The v6 mount is sized around a 34.5 × 58 mm display PCB and an 18 × 22.52 mm ESP32-C3 PCB.
 - Hookup wire and a 47–100 Ω series resistor for the backlight of the reference TFT module.
-- A 2.4 GHz Wi-Fi network that lets the ESP32 reach the Mac on the local network.
+- A 2.4 GHz Wi-Fi network that lets the ESP32 reach the gateway.
 
 | TFT pin | ESP32-C3 connection |
 | --- | --- |
@@ -83,14 +83,14 @@ For each row, import all listed files as **one object with multiple parts**. Kee
 
 ## Set up the gateway
 
-The following setup uses macOS, Python 3, OpenSSL, and Docker with the Compose plugin. For live readings, install Codex CLI and Claude Code and sign in to each on the Mac that will run the collector. Python uses only the standard library.
+The steps below run the collector and gateway on the same host. They use Bash, Git, Python 3, and OpenSSL. You can run the gateway with Docker Compose or directly with Python. For live readings, install Codex CLI and Claude Code on the collector host and sign in to both. The collector and gateway use the Python standard library.
 
 ### 1. Clone and generate local credentials
 
 ```bash
 git clone https://github.com/Franek1703/deskBuddy.git
 cd deskBuddy
-GATEWAY_IP=192.168.1.50  # Replace with your Mac's LAN IP.
+GATEWAY_IP=192.168.1.50  # Replace with the gateway host's LAN IP.
 ./deploy/init_secrets.sh "$GATEWAY_IP"
 ```
 
@@ -112,7 +112,7 @@ python3 tools/write_scenario.py normal
 
 ### 3. Start the gateway
 
-From the repository root, in a second terminal:
+From the repository root on the gateway host, in a second terminal:
 
 ```bash
 docker compose -f deploy/compose.yaml up -d --build
@@ -140,7 +140,7 @@ From the repository root:
 </details>
 
 <details>
-<summary>Keep the collector running with launchd</summary>
+<summary>Keep the collector running with launchd on macOS</summary>
 
 Stop the foreground collector before installing the per-user agent:
 
@@ -149,9 +149,9 @@ Stop the foreground collector before installing the per-user agent:
 tail -f deploy/local/collector.log
 ```
 
-Use `--codex-bin` or `--claude-cmd` with the foreground collector if your CLIs need custom paths or if Claude Code runs on another host over SSH.
-
 </details>
+
+Use `--codex-bin` or `--claude-cmd` if your CLIs need custom paths or if Claude Code runs on another host over SSH.
 
 ## Flash and provision the ESP32
 
@@ -200,7 +200,7 @@ Test sleep over USB with `python3 tools/serial_log.py --seconds 40 --send "SLEEP
 | --- | --- |
 | Dark or garbled display | Verify backlight power and SPI wiring. Send `TEST` for a colour pattern and `APPLY` to return to the usage screen. The defaults are `tft_tab=2` (black tab) and `tft_mhz=8`. Other panels may need a different tab, rotation, colour order, inversion, or offsets. |
 | `NO WIFI` | Confirm the SSID is available on 2.4 GHz. The suffix `d201` means no AP found, `d202` means authentication failed, and `d15` means the handshake timed out. Use `SCAN` after the connection attempt because scanning interrupts it. If authentication remains unreliable, `SET wifi_tx 13` is one setting to try. The default is 8.5 dBm. |
-| Wi-Fi connected, HTTPS fails | Check that the LAN IP matches the certificate, the ESP32 has the corresponding CA, and the Mac accepts connections on port 8443. Check clock status over USB if TLS reports that the certificate is outside its validity period. |
+| Wi-Fi connected, HTTPS fails | Check that the gateway's LAN IP matches the certificate, the ESP32 has the corresponding CA, and the gateway host accepts connections on port 8443. Check clock status over USB if TLS reports that the certificate is outside its validity period. |
 | Usage is stale or missing | Check the collector logs, CLI sign-ins and `/healthz`. Write the `normal` scenario with the collector stopped to verify the rest of the path. |
 
 USB serial runs at 115200 baud. Start with `HELP`, `STATUS`, and `FETCH`. The gateway's `seq` and `served` log values match the device's `RENDER` log, so you can trace a particular response.
